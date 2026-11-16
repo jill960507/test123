@@ -260,6 +260,20 @@
                 .street { height: 250px }
                 .street-shop { width: 150px }
             }
+            .street-3d {
+                position: absolute;
+                inset: 0;
+                width: 100%;
+                height: 100%;
+                display: none
+            }
+            .street.is-3d { height: 400px }
+            .street.is-3d .street-3d { display: block }
+            .street.is-3d .street-2d { display: none }
+            .street.is-3d .street-caption { top: 18px }
+            @media(max-width: 767px) {
+                .street.is-3d { height: 340px }
+            }
             @media(prefers-reduced-motion: reduce) {
                 .walker { animation-duration: calc(var(--dur) * 1.4) }
                 .walker svg { animation: none }
@@ -336,6 +350,8 @@
                     <p class="text-[#bc6d37] text-xs tracking-[.3em] font-semibold">EVERY DAY, PEOPLE COME AND GO</p>
                     <p class="serif text-lg md:text-xl font-bold mt-2">人來人往，只為這一口金黃。</p>
                 </div>
+                <canvas id="street3d" class="street-3d" aria-hidden="true"></canvas>
+                <div class="street-2d">
                 <svg class="street-shop" viewBox="0 0 230 120" aria-hidden="true">
                     <path class="steam" d="M150 30 q6 -8 0 -16 q-6 -8 0 -16" stroke="#c9b49c" stroke-width="3" fill="none" stroke-linecap="round"/>
                     <path class="steam s2" d="M162 30 q6 -8 0 -16 q-6 -8 0 -16" stroke="#c9b49c" stroke-width="3" fill="none" stroke-linecap="round"/>
@@ -351,6 +367,7 @@
                 </svg>
                 <div class="street-ground"></div>
                 <div id="streetWalkers"></div>
+                </div>
             </section>
             <!-- Story -->
             <section id="story" class="py-20 md:py-28">
@@ -1057,6 +1074,334 @@
                 }
                 box.innerHTML = html;
             })();
+        </script>
+        <script type="module">
+            // 人來人往 3D：行人走過店門口，部分顧客走進店裡、提著外帶袋出來
+            import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+
+            const section = document.querySelector('.street');
+            const canvas = document.getElementById('street3d');
+            const start = async () => {
+                if (!section || !canvas) return;
+                let renderer;
+                try {
+                    renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+                } catch (e) {
+                    return; // 不支援 WebGL：保留 2D 版本
+                }
+                section.classList.add('is-3d');
+                renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+                renderer.shadowMap.enabled = true;
+                renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+                renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+                const scene = new THREE.Scene();
+                scene.fog = new THREE.Fog(0xf3e4cf, 16, 34);
+                const camera = new THREE.PerspectiveCamera(32, 2, 0.1, 100);
+                const lookAt = new THREE.Vector3(0, 2.3, -1);
+
+                // 燈光
+                scene.add(new THREE.HemisphereLight(0xfff4e2, 0xb89b7c, 1.4));
+                const sun = new THREE.DirectionalLight(0xffe2b8, 2.2);
+                sun.position.set(-6, 10, 8);
+                sun.castShadow = true;
+                sun.shadow.mapSize.set(1024, 1024);
+                Object.assign(sun.shadow.camera, { left: -16, right: 16, top: 10, bottom: -6, near: 1, far: 40 });
+                sun.shadow.bias = -0.0005;
+                scene.add(sun);
+
+                const mat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.85, ...extra });
+                const box = (w, h, d, material, x, y, z, shadow = true) => {
+                    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
+                    m.position.set(x, y, z);
+                    m.castShadow = shadow;
+                    m.receiveShadow = true;
+                    scene.add(m);
+                    return m;
+                };
+                const canvasTexture = (w, h, draw) => {
+                    const c = document.createElement('canvas');
+                    c.width = w; c.height = h;
+                    draw(c.getContext('2d'));
+                    const t = new THREE.CanvasTexture(c);
+                    t.colorSpace = THREE.SRGBColorSpace;
+                    t.anisotropy = 4;
+                    return t;
+                };
+
+                // 地面：人行道＋馬路
+                const ground = new THREE.Mesh(new THREE.PlaneGeometry(60, 5), mat(0xe9dccb));
+                ground.rotation.x = -Math.PI / 2;
+                ground.position.set(0, 0, 1);
+                ground.receiveShadow = true;
+                scene.add(ground);
+                const road = new THREE.Mesh(new THREE.PlaneGeometry(60, 14), mat(0xb7a48f));
+                road.rotation.x = -Math.PI / 2;
+                road.position.set(0, -0.02, 10.5);
+                road.receiveShadow = true;
+                scene.add(road);
+                box(60, 0.12, 0.25, mat(0xd8c6b0), 0, 0.06, 3.5, false);
+
+                // 店面
+                const brown = mat(0x34251d), wood = mat(0x4a362a), orange = mat(0xbc6d37);
+                const FRONT = -1.5, W = 6, H = 3.6, DOOR_W = 1.3, DOOR_H = 2.3;
+                const segW = (W - DOOR_W) / 2;
+                box(segW, H, 0.16, brown, -(DOOR_W / 2 + segW / 2), H / 2, FRONT - 0.08);
+                box(segW, H, 0.16, brown, DOOR_W / 2 + segW / 2, H / 2, FRONT - 0.08);
+                box(DOOR_W, H - DOOR_H, 0.16, brown, 0, DOOR_H + (H - DOOR_H) / 2, FRONT - 0.08);
+                box(0.12, H, 3, brown, -W / 2 + 0.06, H / 2, FRONT - 1.5);
+                box(0.12, H, 3, brown, W / 2 - 0.06, H / 2, FRONT - 1.5);
+                box(W + 0.4, 0.25, 3.3, wood, 0, H + 0.12, FRONT - 1.5);
+                box(DOOR_W + 0.2, 0.1, 0.24, orange, 0, DOOR_H + 0.05, FRONT);
+                // 店內（溫暖燈光，從門口看得到）
+                const room = new THREE.Mesh(new THREE.BoxGeometry(W - 0.3, H - 0.1, 2.8),
+                    mat(0x7a5038, { side: THREE.BackSide, emissive: 0x5a3015, emissiveIntensity: 0.6 }));
+                room.position.set(0, H / 2, FRONT - 1.45);
+                room.receiveShadow = true;
+                scene.add(room);
+                box(3, 1, 0.5, orange, 0, 0.5, FRONT - 2.4);
+                const inside = new THREE.PointLight(0xffc27a, 6, 6, 1.5);
+                inside.position.set(0, 2.6, FRONT - 1.6);
+                scene.add(inside);
+                // 窗戶
+                const glow = mat(0xffd9a0, { emissive: 0xffb866, emissiveIntensity: 0.9 });
+                [-1, 1].forEach(side => {
+                    const x = side * (DOOR_W / 2 + segW / 2);
+                    box(1.75, 1.35, 0.06, wood, x, 1.45, FRONT + 0.02, false);
+                    box(1.55, 1.15, 0.06, glow, x, 1.45, FRONT + 0.05, false);
+                    box(0.05, 1.15, 0.08, wood, x, 1.45, FRONT + 0.08, false);
+                });
+                // 條紋遮雨棚
+                const stripes = canvasTexture(256, 16, ctx => {
+                    for (let i = 0; i < 8; i++) {
+                        ctx.fillStyle = i % 2 ? '#f9f5ed' : '#bc6d37';
+                        ctx.fillRect(i * 32, 0, 32, 16);
+                    }
+                });
+                stripes.wrapS = THREE.RepeatWrapping;
+                stripes.repeat.set(3, 1);
+                const awning = new THREE.Mesh(new THREE.PlaneGeometry(W + 0.5, 1.15),
+                    new THREE.MeshStandardMaterial({ map: stripes, side: THREE.DoubleSide, roughness: 0.9 }));
+                awning.position.set(0, 2.62, FRONT + 0.5);
+                awning.rotation.x = -Math.PI / 2 + 0.42;
+                awning.castShadow = true;
+                scene.add(awning);
+                box(W + 0.5, 0.18, 0.04, orange, 0, 2.33, FRONT + 1.02, false);
+                // 招牌
+                try { await document.fonts.load('700 96px "Noto Serif TC"'); } catch (e) {}
+                const signTex = canvasTexture(512, 144, ctx => {
+                    ctx.fillStyle = '#f9f5ed';
+                    ctx.fillRect(0, 0, 512, 144);
+                    ctx.strokeStyle = '#bc6d37';
+                    ctx.lineWidth = 10;
+                    ctx.strokeRect(10, 10, 492, 124);
+                    ctx.fillStyle = '#34251d';
+                    ctx.font = '700 92px "Noto Serif TC", serif';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText('山餃', 256, 78);
+                });
+                const sign = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.62, 0.08),
+                    [wood, wood, wood, wood, new THREE.MeshStandardMaterial({ map: signTex, roughness: 0.7 }), wood]);
+                sign.position.set(0, 3.2, FRONT + 0.06);
+                scene.add(sign);
+                // 燈籠
+                const lanternMat = mat(0xe8742c, { emissive: 0xd9541a, emissiveIntensity: 0.8 });
+                [-1.35, 1.35].forEach(x => {
+                    const l = new THREE.Mesh(new THREE.SphereGeometry(0.2, 20, 14), lanternMat);
+                    l.scale.y = 1.2;
+                    l.position.set(x, 2.05, FRONT + 0.75);
+                    scene.add(l);
+                    box(0.02, 0.25, 0.02, wood, x, 2.38, FRONT + 0.75, false);
+                });
+                const porch = new THREE.PointLight(0xffb56b, 3, 5, 1.6);
+                porch.position.set(0, 2.1, FRONT + 0.9);
+                scene.add(porch);
+                // 蒸籠＋蒸氣
+                box(0.9, 0.85, 0.6, wood, 2.25, 0.42, FRONT + 0.45);
+                const bamboo = mat(0xd9a86a);
+                for (let i = 0; i < 3; i++) {
+                    const c = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.17, 20), bamboo);
+                    c.position.set(2.25, 0.94 + i * 0.18, FRONT + 0.45);
+                    c.castShadow = true;
+                    scene.add(c);
+                }
+                const steamMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5, depthWrite: false });
+                const steam = Array.from({ length: 9 }, (_, i) => {
+                    const s = new THREE.Mesh(new THREE.SphereGeometry(0.11, 10, 8), steamMat.clone());
+                    s.userData.t = i / 9;
+                    scene.add(s);
+                    return s;
+                });
+
+                // 隔壁建築與路燈，讓街景延伸
+                [[-7.6, 4.4, 0xd9c3a5], [7.6, 3.8, 0xcdb497], [-15.5, 3.6, 0xc9b192], [15.5, 4.8, 0xd6c0a2]].forEach(([x, h, c]) => {
+                    box(9.2, h, 3, mat(c), x, h / 2, FRONT - 1.5);
+                    for (let i = -1; i <= 1; i++) box(1.3, 1, 0.05, mat(0x8c7461), x + i * 2.8, h * 0.6, FRONT + 0.03, false);
+                });
+                const lampMat = mat(0xfff0c8, { emissive: 0xffd28a, emissiveIntensity: 1 });
+                [-4.2, 4.2].forEach(x => {
+                    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.07, 3, 10), mat(0x3d2e25));
+                    pole.position.set(x, 1.5, 3.1);
+                    pole.castShadow = true;
+                    scene.add(pole);
+                    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.16, 16, 12), lampMat);
+                    bulb.position.set(x, 3.05, 3.1);
+                    scene.add(bulb);
+                });
+
+                // 行人
+                const shirts = [0x34251d, 0xbc6d37, 0x6b7a5a, 0x4f5d73, 0xa65d3f, 0xe0cdb0, 0x7a4a3a, 0x8f6f4f];
+                const pants = [0x2b2b33, 0x3d3128, 0x55606e, 0x6b5a48];
+                const skins = [0xf1c7a1, 0xe0ac7e, 0xc68b5e, 0x9b6a45];
+                const hairs = [0x231a14, 0x3b2a1e, 0x6b4b2e, 0x111111];
+                const pick = a => a[Math.floor(Math.random() * a.length)];
+                const limb = (len, r, material) => {
+                    const pivot = new THREE.Group();
+                    const m = new THREE.Mesh(new THREE.CapsuleGeometry(r, len, 4, 8), material);
+                    m.position.y = -len / 2 - r;
+                    m.castShadow = true;
+                    pivot.add(m);
+                    return pivot;
+                };
+                const makePerson = () => {
+                    const g = new THREE.Group();
+                    const shirt = mat(pick(shirts)), pant = mat(pick(pants)), skin = mat(pick(skins));
+                    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.21, 0.42, 4, 10), shirt);
+                    body.position.y = 1.08;
+                    body.castShadow = true;
+                    const head = new THREE.Mesh(new THREE.SphereGeometry(0.17, 16, 12), skin);
+                    head.position.y = 1.58;
+                    head.castShadow = true;
+                    const hair = new THREE.Mesh(new THREE.SphereGeometry(0.18, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.55), mat(pick(hairs)));
+                    hair.position.y = 1.6;
+                    hair.rotation.x = -0.25;
+                    const legL = limb(0.5, 0.075, pant), legR = limb(0.5, 0.075, pant);
+                    legL.position.set(-0.1, 0.8, 0);
+                    legR.position.set(0.1, 0.8, 0);
+                    const armL = limb(0.4, 0.06, shirt), armR = limb(0.4, 0.06, shirt);
+                    armL.position.set(-0.27, 1.32, 0);
+                    armR.position.set(0.27, 1.32, 0);
+                    const bag = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.24, 0.14), mat(0xf2b67b));
+                    bag.position.set(0, -0.7, 0.02);
+                    bag.castShadow = true;
+                    bag.visible = false;
+                    armR.add(bag);
+                    g.add(body, head, hair, legL, legR, armL, armR);
+                    g.userData = { legL, legR, armL, armR, bag };
+                    const s = 0.88 + Math.random() * 0.22;
+                    g.scale.setScalar(s);
+                    scene.add(g);
+                    return g;
+                };
+
+                const EDGE = 18, DOOR_IN = new THREE.Vector3(0, 0, FRONT - 0.9);
+                const lane = () => -0.7 + Math.random() * 3.2;
+                const side = () => (Math.random() < 0.5 ? -1 : 1);
+                const plan = (p, initial) => {
+                    const from = side();
+                    const z = lane();
+                    const startX = initial ? -EDGE + Math.random() * EDGE * 2 : from * EDGE;
+                    const dir = initial ? (Math.random() < 0.5 ? 1 : -1) : -from;
+                    p.position.set(startX, 0, z);
+                    p.userData.bag.visible = Math.random() < 0.15;
+                    p.userData.speed = 1.05 + Math.random() * 0.5;
+                    p.userData.wait = 0;
+                    const visit = Math.random() < 0.45;
+                    if (visit) {
+                        const ax = (Math.random() - 0.5) * 1.6;
+                        p.userData.path = [
+                            { x: ax, z }, { x: ax * 0.3, z: FRONT + 0.4 }, { x: 0, z: DOOR_IN.z, act: 'enter' },
+                            { x: 0, z: FRONT + 0.5, act: 'bag' }, { x: (Math.random() - 0.5) * 2, z: lane() },
+                            { x: side() * EDGE, z: null }
+                        ];
+                    } else {
+                        p.userData.path = [{ x: dir * EDGE, z }];
+                    }
+                    p.visible = true;
+                };
+                const COUNT = window.innerWidth < 768 ? 9 : 16;
+                const people = Array.from({ length: COUNT }, (_, i) => {
+                    const p = makePerson();
+                    plan(p, true);
+                    return p;
+                });
+
+                const angleLerp = (a, b, t) => {
+                    let d = ((b - a + Math.PI) % (Math.PI * 2)) - Math.PI;
+                    if (d < -Math.PI) d += Math.PI * 2;
+                    return a + d * t;
+                };
+                const step = (p, dt) => {
+                    const u = p.userData;
+                    if (u.wait > 0) {
+                        u.wait -= dt;
+                        if (u.wait <= 0) { p.visible = true; u.bag.visible = true; }
+                        return;
+                    }
+                    const target = u.path[0];
+                    if (!target) return plan(p, false);
+                    const tz = target.z === null ? p.position.z : target.z;
+                    const dx = target.x - p.position.x, dz = tz - p.position.z;
+                    const dist = Math.hypot(dx, dz);
+                    const move = u.speed * dt;
+                    if (dist <= move) {
+                        p.position.set(target.x, 0, tz);
+                        u.path.shift();
+                        if (target.act === 'enter') { p.visible = false; u.wait = 2 + Math.random() * 3; }
+                        return;
+                    }
+                    p.position.x += (dx / dist) * move;
+                    p.position.z += (dz / dist) * move;
+                    p.rotation.y = angleLerp(p.rotation.y, Math.atan2(dx, dz), Math.min(1, dt * 8));
+                    u.phase = (u.phase || Math.random() * 6) + dt * u.speed * 5.2;
+                    const sw = Math.sin(u.phase) * 0.6;
+                    u.legL.rotation.x = sw;
+                    u.legR.rotation.x = -sw;
+                    u.armL.rotation.x = -sw * 0.8;
+                    u.armR.rotation.x = u.bag.visible ? sw * 0.25 : sw * 0.8;
+                    p.children[0].position.y = 1.08 + Math.abs(Math.cos(u.phase)) * 0.035;
+                };
+
+                // 相機：依畫面寬高比調整距離，手機也看得到整間店
+                const resize = () => {
+                    const w = canvas.clientWidth, h = canvas.clientHeight;
+                    if (!w || !h) return;
+                    renderer.setSize(w, h, false);
+                    camera.aspect = w / h;
+                    const vfov = THREE.MathUtils.degToRad(camera.fov);
+                    const hfov = 2 * Math.atan(Math.tan(vfov / 2) * camera.aspect);
+                    camera.userData.dist = Math.max(14, 6 / Math.tan(hfov / 2));
+                    camera.updateProjectionMatrix();
+                };
+                new ResizeObserver(resize).observe(canvas);
+                resize();
+
+                let visible = true, last = performance.now();
+                new IntersectionObserver(e => { visible = e[0].isIntersecting; last = performance.now(); }).observe(section);
+                const clock = { t: 0 };
+                const frame = now => {
+                    requestAnimationFrame(frame);
+                    if (!visible) return;
+                    const dt = Math.min((now - last) / 1000, 0.05);
+                    last = now;
+                    clock.t += dt;
+                    people.forEach(p => step(p, dt));
+                    steam.forEach(s => {
+                        s.userData.t = (s.userData.t + dt * 0.35) % 1;
+                        const t = s.userData.t;
+                        s.position.set(2.25 + Math.sin(t * 9 + s.id) * 0.12, 1.4 + t * 1.3, FRONT + 0.45);
+                        s.scale.setScalar(0.6 + t * 1.6);
+                        s.material.opacity = 0.45 * Math.sin(t * Math.PI);
+                    });
+                    const d = camera.userData.dist || 14;
+                    camera.position.set(Math.sin(clock.t * 0.12) * 1.2, 4.6, d);
+                    camera.lookAt(lookAt);
+                    renderer.render(scene, camera);
+                };
+                requestAnimationFrame(frame);
+            };
+            start().catch(() => section && section.classList.remove('is-3d'));
         </script>
     </body>
 </html>
