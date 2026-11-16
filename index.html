@@ -261,7 +261,8 @@
                 .street-shop { width: 150px }
             }
             @media(prefers-reduced-motion: reduce) {
-                .walker,.walker svg,.walker .limb,.walker .bag,.steam { animation-play-state: paused }
+                .walker { animation-duration: calc(var(--dur) * 1.4) }
+                .walker svg { animation: none }
             }
         </style>
     </head>
