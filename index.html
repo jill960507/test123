@@ -626,7 +626,7 @@
                 <div id="checkoutFormView">
                     <p class="section-kicker mb-2">CHECKOUT</p>
                     <h2 id="checkoutTitle" class="serif text-3xl font-bold mb-3">確認訂單</h2>
-                    <p class="text-sm text-[#756c63] mb-6">此為模擬結帳，不會收款或實際出餐。</p>
+                    <p id="checkoutNotice" class="text-sm text-[#756c63] mb-6">此為模擬結帳，不會收款或實際出餐。</p>
                     <form id="checkoutForm" class="space-y-4">
                         <fieldset>
                             <legend class="font-bold mb-2">取餐方式</legend>
@@ -654,22 +654,32 @@
                             <label class="block text-sm font-bold mb-2" for="customerAddress">宅配地址</label>
                             <input id="customerAddress" name="address" autocomplete="street-address" class="w-full rounded-xl border border-[#ded3c6] p-3 bg-white" placeholder="請輸入完整地址">
                         </div>
+                        <div>
+                            <label class="block text-sm font-bold mb-2" for="customerNote">備註（選填）</label>
+                            <textarea id="customerNote" name="note" maxlength="200" rows="2" class="w-full rounded-xl border border-[#ded3c6] p-3 bg-white" placeholder="例如：預計 18:30 取餐、不要辣"></textarea>
+                        </div>
+                        <div class="hidden" aria-hidden="true">
+                            <label for="customerWebsite">網站</label>
+                            <input id="customerWebsite" name="website" tabindex="-1" autocomplete="off">
+                        </div>
                         <div class="bg-[#f0e9df] rounded-xl p-4 flex justify-between font-bold">
-                            <span>模擬訂單金額</span>
+                            <span id="checkoutAmountLabel">模擬訂單金額</span>
                             <span id="checkoutAmount"></span>
                         </div>
-                        <button class="btn btn-primary w-full" type="submit">確認建立模擬訂單</button>
+                        <p id="checkoutError" class="hidden text-sm text-[#b3261e] bg-[#fdecea] rounded-xl p-3" role="alert"></p>
+                        <button id="checkoutSubmit" class="btn btn-primary w-full disabled:opacity-60 disabled:cursor-wait" type="submit">確認建立模擬訂單</button>
                     </form>
                 </div>
                 <div id="checkoutSuccess" class="hidden text-center py-12">
                     <span class="inline-grid place-items-center rounded-full w-20 h-20 bg-[#e2eddf] text-[#477348] mb-6">
                         <i data-lucide="check" class="w-10 h-10"></i>
                     </span>
-                    <h2 class="serif text-3xl font-bold mb-4">訂單已建立</h2>
+                    <h2 id="successTitle" class="serif text-3xl font-bold mb-4">訂單已建立</h2>
                     <p class="text-[#756c63] mb-2">
-                        模擬訂單編號：<strong id="orderNumber"></strong>
+                        <span id="orderNumberLabel">模擬訂單編號</span>：<strong id="orderNumber"></strong>
                     </p>
-                    <p class="text-sm text-[#756c63] mb-8">這是前端展示流程，沒有傳送訂單至商家。</p>
+                    <p id="orderTotalLine" class="hidden text-[#756c63] mb-2">總金額：<strong id="orderTotal"></strong></p>
+                    <p id="successNote" class="text-sm text-[#756c63] mb-8">這是前端展示流程，沒有傳送訂單至商家。</p>
                     <button id="successClose" class="btn btn-primary">返回網站</button>
                 </div>
             </div>
@@ -678,12 +688,15 @@
         <div id="privacyModal" class="fixed inset-0 z-[60] hidden bg-black/60 p-4 grid place-items-center" role="dialog" aria-modal="true" aria-label="隱私權政策">
             <div class="bg-white rounded-2xl p-8 max-w-lg w-full">
                 <h2 class="serif text-2xl font-bold mb-4">隱私權說明</h2>
-                <p class="text-sm text-[#756c63] leading-8 mb-6">本站為展示用範例。購物車資料僅儲存在本機瀏覽器，模擬結帳資訊不會傳送至伺服器。電子報表單不會實際收集電子郵件。外部圖片、字體與地圖服務可能依其各自政策處理連線資訊。</p>
+                <p id="privacyText" class="text-sm text-[#756c63] leading-8 mb-6">本站為展示用範例。購物車資料僅儲存在本機瀏覽器，模擬結帳資訊不會傳送至伺服器。電子報表單不會實際收集電子郵件。外部圖片、字體與地圖服務可能依其各自政策處理連線資訊。</p>
                 <button id="privacyClose" class="btn btn-primary">我知道了</button>
             </div>
         </div>
         <script>
             'use strict';
+            // 線上訂單：貼上 Google Apps Script 部署後的「網頁應用程式」網址（結尾是 /exec）。
+            // 留空時維持模擬結帳，不會送出任何資料。設定方式請看 gas/README.md。
+            const ORDER_API_URL = '';
             // Product data (illustrative menu and prices)
             const products = [{
                 id: 'p1',
@@ -927,6 +940,8 @@
                 $('checkoutFormView').classList.remove('hidden');
                 $('checkoutSuccess').classList.add('hidden');
                 $('checkoutForm').reset();
+                $('checkoutError').classList.add('hidden');
+                checkoutId = 'web-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
                 $('addressGroup').classList.add('hidden');
                 $('customerAddress').required = false;
                 $('checkoutLayer').classList.remove('hidden');
@@ -942,16 +957,82 @@
                 $('customerAddress').required = delivery
             }
             ));
-            $('checkoutForm').addEventListener('submit', e => {
-                e.preventDefault();
-                if (!cartCount())
-                    return;
-                $('orderNumber').textContent = 'SJ-' + Date.now().toString().slice(-9);
+            // 結帳：有設定 ORDER_API_URL 就把訂單送到 Google Sheet，否則維持模擬流程
+            let checkoutId = '';
+            const liveOrders = /^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(ORDER_API_URL);
+            if (liveOrders) {
+                $('checkoutNotice').textContent = '送出後店家會開始準備餐點，取餐或收貨時付款。';
+                $('checkoutAmountLabel').textContent = '訂單金額';
+                $('checkoutSubmit').textContent = '送出訂單';
+                $('privacyText').textContent = '購物車資料儲存在你的瀏覽器中。送出訂單時，你填寫的姓名、電話、地址、備註與訂購品項會傳送至本店的 Google 試算表，僅用於製作餐點、聯絡取餐與配送。電子報表單不會實際收集電子郵件。外部圖片、字體與地圖服務可能依其各自政策處理連線資訊。';
+            }
+            function showCheckoutError(message) {
+                $('checkoutError').textContent = message;
+                $('checkoutError').classList.remove('hidden');
+            }
+            function showCheckoutSuccess(result) {
+                $('orderNumber').textContent = result.orderNo;
+                if (liveOrders) {
+                    $('successTitle').textContent = '訂單已送出';
+                    $('orderNumberLabel').textContent = '訂單編號';
+                    $('orderTotal').textContent = money(result.total) + (result.shipping ? `（含運費 ${money(result.shipping)}）` : '');
+                    $('orderTotalLine').classList.remove('hidden');
+                    $('successNote').textContent = '請記下訂單編號，取餐或聯絡店家時提供即可。';
+                }
                 cart = {};
                 saveCart();
                 $('checkoutFormView').classList.add('hidden');
                 $('checkoutSuccess').classList.remove('hidden');
                 icons()
+            }
+            $('checkoutForm').addEventListener('submit', async e => {
+                e.preventDefault();
+                if (!cartCount())
+                    return;
+                if (!liveOrders)
+                    return showCheckoutSuccess({ orderNo: 'SJ-' + Date.now().toString().slice(-9) });
+                const form = new FormData($('checkoutForm'));
+                const payload = {
+                    action: 'createOrder',
+                    clientOrderId: checkoutId,
+                    fulfillment: form.get('fulfillment'),
+                    name: form.get('name'),
+                    phone: form.get('phone'),
+                    address: form.get('address'),
+                    note: form.get('note'),
+                    website: form.get('website'),
+                    items: Object.entries(cart).map(([id, qty]) => ({ id, qty })),
+                    clientTotal: cartTotal()
+                };
+                const button = $('checkoutSubmit');
+                button.disabled = true;
+                button.textContent = '訂單送出中…';
+                $('checkoutError').classList.add('hidden');
+                const controller = new AbortController();
+                const timer = setTimeout(() => controller.abort(), 25000);
+                try {
+                    // 用 text/plain 送出，避免瀏覽器先發 CORS 預檢（Apps Script 不支援）
+                    const res = await fetch(ORDER_API_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                        body: JSON.stringify(payload),
+                        signal: controller.signal
+                    });
+                    const result = await res.json();
+                    if (!result.ok)
+                        throw new Error(result.error || '訂單送出失敗，請稍後再試');
+                    showCheckoutSuccess(result);
+                } catch (err) {
+                    showCheckoutError(err.name === 'AbortError' || err instanceof TypeError
+                        ? '網路連線不穩，訂單可能尚未送出。請確認網路後再按一次（不會重複下單）。'
+                        : err instanceof SyntaxError
+                        ? '訂單系統暫時無法使用，請稍後再試或直接來電訂購。'
+                        : err.message);
+                } finally {
+                    clearTimeout(timer);
+                    button.disabled = false;
+                    button.textContent = '送出訂單';
+                }
             }
             );
             $('checkoutLayer').addEventListener('click', e => {
