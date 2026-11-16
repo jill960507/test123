@@ -336,13 +336,21 @@ function sendTestEmail() {
 
 function readMenu_() {
   const sheet = sheet_(SpreadsheetApp.getActiveSpreadsheet(), SHEET.MENU, MENU_HEADERS);
+  // 「菜單」還沒有任何品項（例如沒執行過 setup）時，自動寫入預設菜單
+  if (sheet.getLastRow() < 2) {
+    sheet.getRange(2, 1, DEFAULT_MENU.length, 4).setValues(DEFAULT_MENU);
+    sheet.getRange(2, 5, DEFAULT_MENU.length, 1).insertCheckboxes().check();
+    SpreadsheetApp.flush();
+  }
   const menu = {};
-  if (sheet.getLastRow() < 2) return menu;
   sheet.getRange(2, 1, sheet.getLastRow() - 1, MENU_HEADERS.length).getValues().forEach(r => {
     const id = String(r[0]).trim();
     const price = Number(r[3]);
-    if (!id || !(price >= 0)) return;
-    menu[id] = { id, category: String(r[1]), name: String(r[2]), price, active: r[4] === true || r[4] === '是' };
+    if (!id || r[3] === '' || !(price >= 0)) return;
+    // 只有「取消勾選」或填「否／FALSE」才算下架；空白視為上架
+    const flag = String(r[4]).trim().toUpperCase();
+    const active = r[4] !== false && flag !== '否' && flag !== 'FALSE';
+    menu[id] = { id, category: String(r[1]), name: String(r[2]), price, active };
   });
   return menu;
 }
