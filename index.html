@@ -185,6 +185,84 @@
                     background:linear-gradient(90deg,rgba(24,17,12,.82),rgba(24,17,12,.4))
                 }
             }
+
+            /* 人來人往動畫 */
+            .street {
+                position: relative;
+                height: 270px;
+                overflow: hidden;
+                background: linear-gradient(180deg,#f6e3c8 0%,#f9f5ed 70%);
+                border-bottom: 1px solid #e6d9c8
+            }
+            .street-caption {
+                position: absolute;
+                top: 22px;
+                left: 0;
+                right: 0;
+                text-align: center;
+                z-index: 6;
+                color: var(--brown)
+            }
+            .street-shop {
+                position: absolute;
+                left: 50%;
+                bottom: 34px;
+                width: 230px;
+                transform: translateX(-50%);
+                z-index: 1
+            }
+            .street-ground {
+                position: absolute;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                height: 36px;
+                background: #e9dccb;
+                border-top: 3px solid #d8c6b0;
+                z-index: 2
+            }
+            .walker {
+                position: absolute;
+                left: 0;
+                width: 100%;
+                pointer-events: none;
+                animation: walk-right var(--dur) linear infinite;
+                animation-delay: var(--delay)
+            }
+            .walker.left { animation-name: walk-left }
+            .walker.back { bottom: 40px; z-index: 0; opacity: .55 }
+            .walker.front { bottom: 10px; z-index: 4 }
+            .walker svg {
+                display: block;
+                width: calc(40px * var(--size));
+                height: calc(80px * var(--size));
+                overflow: visible;
+                animation: bob .5s ease-in-out infinite alternate
+            }
+            .walker.left svg { transform: scaleX(-1) }
+            .walker .limb {
+                transform-box: view-box;
+                animation: swing .5s ease-in-out infinite alternate
+            }
+            .walker .leg { transform-origin: 20px 46px }
+            .walker .arm { transform-origin: 20px 23px }
+            .walker .b { animation-direction: alternate-reverse }
+            .walker .bag { transform-box: view-box; transform-origin: 20px 23px; animation: swing .5s ease-in-out infinite alternate-reverse }
+            @keyframes walk-right { from { transform: translateX(-8%) } to { transform: translateX(108%) } }
+            @keyframes walk-left { from { transform: translateX(108%) } to { transform: translateX(-8%) } }
+            @keyframes swing { from { transform: rotate(-24deg) } to { transform: rotate(24deg) } }
+            @keyframes bob { from { translate: 0 0 } to { translate: 0 -2px } }
+            .steam { animation: steam 2.4s ease-in-out infinite; opacity: 0 }
+            .steam.s2 { animation-delay: .8s }
+            .steam.s3 { animation-delay: 1.6s }
+            @keyframes steam { 0% { opacity: 0; transform: translateY(6px) } 40% { opacity: .7 } 100% { opacity: 0; transform: translateY(-12px) } }
+            @media(max-width: 767px) {
+                .street { height: 250px }
+                .street-shop { width: 150px }
+            }
+            @media(prefers-reduced-motion: reduce) {
+                .walker,.walker svg,.walker .limb,.walker .bag,.steam { animation-play-state: paused }
+            }
         </style>
     </head>
     <body>
@@ -250,6 +328,28 @@
                     </div>
                 </div>
                 <div class="absolute bottom-6 right-6 text-white/70 text-xs tracking-widest hidden sm:block">CRAFTED FRESH · SERVED WARM</div>
+            </section>
+            <!-- 人來人往 -->
+            <section class="street" aria-label="店門口人來人往的動畫">
+                <div class="street-caption">
+                    <p class="text-[#bc6d37] text-xs tracking-[.3em] font-semibold">EVERY DAY, PEOPLE COME AND GO</p>
+                    <p class="serif text-lg md:text-xl font-bold mt-2">人來人往，只為這一口金黃。</p>
+                </div>
+                <svg class="street-shop" viewBox="0 0 230 120" aria-hidden="true">
+                    <path class="steam" d="M150 30 q6 -8 0 -16 q-6 -8 0 -16" stroke="#c9b49c" stroke-width="3" fill="none" stroke-linecap="round"/>
+                    <path class="steam s2" d="M162 30 q6 -8 0 -16 q-6 -8 0 -16" stroke="#c9b49c" stroke-width="3" fill="none" stroke-linecap="round"/>
+                    <path class="steam s3" d="M174 30 q6 -8 0 -16 q-6 -8 0 -16" stroke="#c9b49c" stroke-width="3" fill="none" stroke-linecap="round"/>
+                    <rect x="10" y="34" width="210" height="86" rx="6" fill="#34251d"/>
+                    <path d="M4 34 h222 l-10 22 h-202z" fill="#bc6d37"/>
+                    <path d="M26 34 l-6 22 M58 34 l-4 22 M90 34 l-2 22 M140 34 l2 22 M172 34 l4 22 M204 34 l6 22" stroke="#f9f5ed" stroke-width="7" opacity=".9"/>
+                    <rect x="78" y="62" width="74" height="22" rx="4" fill="#f9f5ed"/>
+                    <text x="115" y="78" text-anchor="middle" font-family="Noto Serif TC,serif" font-weight="700" font-size="14" fill="#34251d">山餃</text>
+                    <rect x="22" y="90" width="186" height="30" fill="#4a362a"/>
+                    <rect x="22" y="88" width="186" height="5" fill="#bc6d37"/>
+                    <circle cx="40" cy="76" r="8" fill="#f2b67b"/><circle cx="190" cy="76" r="8" fill="#f2b67b"/>
+                </svg>
+                <div class="street-ground"></div>
+                <div id="streetWalkers"></div>
             </section>
             <!-- Story -->
             <section id="story" class="py-20 md:py-28">
@@ -928,6 +1028,34 @@
             renderCart();
             renderLocation();
             icons();
+        </script>
+        <script>
+            // 人來人往：隨機產生行人
+            (function () {
+                const box = document.getElementById('streetWalkers');
+                if (!box) return;
+                const tones = ['#34251d', '#4a362a', '#6b4b37', '#8a5a3a', '#bc6d37', '#5c4a3f'];
+                const pick = a => a[Math.floor(Math.random() * a.length)];
+                const person = (color, bag) => `<svg viewBox="0 0 40 80" aria-hidden="true">
+                    <line class="limb leg a" x1="20" y1="46" x2="20" y2="77" stroke="${color}" stroke-width="6" stroke-linecap="round"/>
+                    <line class="limb leg b" x1="20" y1="46" x2="20" y2="77" stroke="${color}" stroke-width="6" stroke-linecap="round"/>
+                    <line class="limb arm b" x1="20" y1="23" x2="20" y2="43" stroke="${color}" stroke-width="5" stroke-linecap="round" opacity=".8"/>
+                    <rect x="13" y="18" width="14" height="31" rx="6" fill="${color}"/>
+                    <circle cx="20" cy="9" r="7" fill="${color}"/>
+                    ${bag ? `<g class="bag"><line x1="20" y1="23" x2="20" y2="43" stroke="${color}" stroke-width="5" stroke-linecap="round"/><rect x="15" y="42" width="11" height="10" rx="2" fill="#f2b67b"/></g>`
+                          : `<line class="limb arm a" x1="20" y1="23" x2="20" y2="43" stroke="${color}" stroke-width="5" stroke-linecap="round"/>`}
+                </svg>`;
+                const count = window.innerWidth < 768 ? 8 : 14;
+                let html = '';
+                for (let i = 0; i < count; i++) {
+                    const front = i % 2 === 0;
+                    const dur = (front ? 14 : 22) + Math.random() * 10;
+                    const size = front ? 0.95 + Math.random() * 0.25 : 0.6 + Math.random() * 0.15;
+                    const dir = Math.random() < 0.5 ? 'left' : 'right';
+                    html += `<div class="walker ${dir} ${front ? 'front' : 'back'}" style="--dur:${dur.toFixed(1)}s;--delay:-${(Math.random() * dur).toFixed(1)}s;--size:${size.toFixed(2)}">${person(pick(tones), Math.random() < 0.35)}</div>`;
+                }
+                box.innerHTML = html;
+            })();
         </script>
     </body>
 </html>
