@@ -1,0 +1,23 @@
+{
+  "name": "山餃 SAN JIAO｜現代職人鍋貼",
+  "short_name": "山餃",
+  "description": "山餃現代職人鍋貼，現包現煎的金黃滋味。瀏覽菜單、線上點餐、查詢門市。",
+  "lang": "zh-Hant",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f9f5ed",
+  "theme_color": "#34251d",
+  "categories": ["food", "shopping"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "線上點餐", "short_name": "點餐", "url": "./#menu", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" }] },
+    { "name": "門市據點", "short_name": "門市", "url": "./#locations", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" }] }
+  ]
+}

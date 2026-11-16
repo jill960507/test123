@@ -4,6 +4,14 @@
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width,initial-scale=1">
         <meta name="theme-color" content="#34251d">
+        <link rel="manifest" href="manifest.webmanifest">
+        <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+        <link rel="icon" type="image/png" sizes="48x48" href="icons/favicon-48.png">
+        <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+        <meta name="mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-title" content="山餃">
+        <meta name="apple-mobile-web-app-status-bar-style" content="default">
         <title>山餃 SAN JIAO｜現代職人鍋貼</title>
         <meta name="description" content="山餃現代職人鍋貼，現包現煎的金黃滋味。探索人氣菜單、冷凍禮盒與門市資訊。">
         <script src="https://cdn.tailwindcss.com"></script>
@@ -300,6 +308,9 @@
                     <a class="hover:text-[#bc6d37]" href="#contact">聯絡我們</a>
                 </nav>
                 <div class="flex items-center gap-2 sm:gap-4">
+                    <button id="installApp" type="button" class="hidden items-center gap-1.5 text-sm font-medium px-3 py-2 rounded-full border border-[#d8c6b0] hover:bg-white" aria-label="將山餃安裝到裝置">
+                        <i data-lucide="download" class="w-4 h-4" aria-hidden="true"></i><span class="hidden sm:inline">安裝 App</span>
+                    </button>
                     <button id="cartOpen" class="relative p-2" aria-label="開啟購物車">
                         <i data-lucide="shopping-bag" class="w-6 h-6"></i>
                         <span id="cartBadge" class="absolute -top-1 -right-1 bg-[#bc6d37] text-white text-[10px] rounded-full min-w-5 h-5 px-1 grid place-items-center">0</span>
@@ -1402,6 +1413,34 @@
                 requestAnimationFrame(frame);
             };
             start().catch(() => section && section.classList.remove('is-3d'));
+        </script>
+        <script>
+            // PWA：註冊 Service Worker，並在可安裝時顯示「安裝 App」按鈕
+            if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+                window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
+            }
+            (function () {
+                const btn = document.getElementById('installApp');
+                let deferred = null;
+                window.addEventListener('beforeinstallprompt', e => {
+                    e.preventDefault();
+                    deferred = e;
+                    btn.classList.remove('hidden');
+                    btn.classList.add('inline-flex');
+                });
+                btn.addEventListener('click', async () => {
+                    if (!deferred) return;
+                    deferred.prompt();
+                    await deferred.userChoice;
+                    deferred = null;
+                    btn.classList.add('hidden');
+                    btn.classList.remove('inline-flex');
+                });
+                window.addEventListener('appinstalled', () => {
+                    btn.classList.add('hidden');
+                    btn.classList.remove('inline-flex');
+                });
+            })();
         </script>
     </body>
 </html>
